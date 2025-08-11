@@ -2,6 +2,7 @@
 // Run: node bot.js
 import ccxt from 'ccxt';
 import fs from 'fs';
+import path from 'path';
 import XLSX from 'xlsx';
 
 /**
@@ -34,7 +35,10 @@ const DEFAULT_CFG = {
     // Virtual Trading
     initialBalance: 100.0,    // Initial balance in EUR
     positionSizePercent: 95,  // Use 95% of available balance per trade
-    excelFile: 'trading_log.xlsx'
+    excelFile: 'trading_log.xlsx',
+    // Logging
+    logFile: 'trading_bot.log',
+    maxLogSize: 10 * 1024 * 1024  // 10MB max log file size
 };
 
 /**
@@ -62,11 +66,87 @@ function loadConfig() {
     if (process.env.INITIAL_BALANCE) cfg.initialBalance = parseFloat(process.env.INITIAL_BALANCE);
     if (process.env.POSITION_SIZE_PERCENT) cfg.positionSizePercent = parseFloat(process.env.POSITION_SIZE_PERCENT);
     if (process.env.EXCEL_FILE) cfg.excelFile = process.env.EXCEL_FILE;
+    if (process.env.LOG_FILE) cfg.logFile = process.env.LOG_FILE;
+    if (process.env.MAX_LOG_SIZE) cfg.maxLogSize = parseInt(process.env.MAX_LOG_SIZE);
 
     return cfg;
 }
 
 const CFG = loadConfig();
+
+// ====== Logging System ======
+/**
+ * Logger that writes to file with automatic rotation
+ */
+class Logger {
+    constructor(logFile, maxSize) {
+        this.logFile = logFile;
+        this.maxSize = maxSize;
+        this.ensureLogDirectory();
+    }
+
+    ensureLogDirectory() {
+        const logDir = path.dirname(this.logFile);
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
+    }
+
+    rotateLogIfNeeded() {
+        try {
+            if (fs.existsSync(this.logFile)) {
+                const stats = fs.statSync(this.logFile);
+                if (stats.size >= this.maxSize) {
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const rotatedFile = this.logFile.replace('.log', `_${timestamp}.log`);
+                    fs.renameSync(this.logFile, rotatedFile);
+                }
+            }
+        } catch (error) {
+            // If rotation fails, continue logging to current file
+        }
+    }
+
+    formatTimestamp() {
+        return new Date().toLocaleString('es-ES', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZone: 'Europe/Madrid'
+        });
+    }
+
+    log(level, message) {
+        this.rotateLogIfNeeded();
+        const timestamp = this.formatTimestamp();
+        const logEntry = `[${timestamp}] [${level}] ${message}\n`;
+
+        try {
+            fs.appendFileSync(this.logFile, logEntry);
+        } catch (error) {
+            // Fallback to console if file write fails
+            console.error(`Failed to write to log file: ${error.message}`);
+            console.log(logEntry.trim());
+        }
+    }
+
+    info(message) {
+        this.log('INFO', message);
+    }
+
+    warn(message) {
+        this.log('WARN', message);
+    }
+
+    error(message) {
+        this.log('ERROR', message);
+    }
+}
+
+const logger = new Logger(CFG.logFile, CFG.maxLogSize);
 
 // ====== indicator utilities ======
 function ema(values, period) {
@@ -120,7 +200,7 @@ function loadState() {
         if (fs.existsSync(CFG.stateFile)) {
             const data = fs.readFileSync(CFG.stateFile, 'utf8');
             const state = JSON.parse(data);
-            console.log(`${CFG.logPrefix} Loaded state from ${CFG.stateFile}`);
+            logger.info(`${CFG.logPrefix} Loaded state from ${CFG.stateFile}`);
             return {
                 lastClosedTs: state.lastClosedTs || 0,
                 totalTrades: state.totalTrades || 0,
@@ -139,7 +219,7 @@ function loadState() {
             };
         }
     } catch (error) {
-        console.warn(`${CFG.logPrefix} Error loading state: ${error.message}`);
+        logger.warn(`${CFG.logPrefix} Error loading state: ${error.message}`);
     }
 
     return {
@@ -180,7 +260,7 @@ function saveState(state) {
 
         fs.writeFileSync(CFG.stateFile, JSON.stringify(stateData, null, 2));
     } catch (error) {
-        console.error(`${CFG.logPrefix} Error saving state: ${error.message}`);
+        logger.error(`${CFG.logPrefix} Error saving state: ${error.message}`);
     }
 }
 
@@ -190,7 +270,7 @@ function saveState(state) {
 function exportTradesToExcel(trades) {
     try {
         if (trades.length === 0) {
-            console.log(`${CFG.logPrefix} No trades to export`);
+            logger.info(`${CFG.logPrefix} No trades to export`);
             return;
         }
 
@@ -238,9 +318,9 @@ function exportTradesToExcel(trades) {
 
         // Write file
         XLSX.writeFile(wb, CFG.excelFile);
-        console.log(`${CFG.logPrefix} Exported ${trades.length} trades to ${CFG.excelFile}`);
+        logger.info(`${CFG.logPrefix} Exported ${trades.length} trades to ${CFG.excelFile}`);
     } catch (error) {
-        console.error(`${CFG.logPrefix} Error exporting to Excel: ${error.message}`);
+        logger.error(`${CFG.logPrefix} Error exporting to Excel: ${error.message}`);
     }
 }
 
@@ -364,7 +444,7 @@ async function initializeExchange() {
     const ex = new exchangeClass({ enableRateLimit: true });
 
     // Load markets
-    console.log(`${CFG.logPrefix} Loading markets...`);
+    logger.info(`${CFG.logPrefix} Loading markets...`);
     await ex.loadMarkets();
 
     // Validate symbol
@@ -379,10 +459,10 @@ async function initializeExchange() {
 
     // Validate timeframe
     if (!ex.timeframes[CFG.timeframe]) {
-        console.warn(`${CFG.logPrefix} Warning: Timeframe ${CFG.timeframe} may not be supported. Available: ${Object.keys(ex.timeframes).join(', ')}`);
+        logger.warn(`${CFG.logPrefix} Warning: Timeframe ${CFG.timeframe} may not be supported. Available: ${Object.keys(ex.timeframes).join(', ')}`);
     }
 
-    console.log(`${CFG.logPrefix} Exchange initialized successfully`);
+    logger.info(`${CFG.logPrefix} Exchange initialized successfully`);
     return ex;
 }
 
@@ -439,7 +519,7 @@ function handlePositionExit(position, exitSignal, state) {
         timeZone: 'Europe/Madrid'
     });
 
-    console.log(`${CFG.logPrefix} ${ts} ${exitSignal.type} ${position.type} at €${exitSignal.price.toFixed(2)} | PnL: ${pnl.toFixed(2)}% (€${pnlEur.toFixed(2)}) | Balance: €${state.balance.toFixed(2)} | Win Rate: ${winRate}%`);
+    logger.info(`${CFG.logPrefix} ${ts} ${exitSignal.type} ${position.type} at €${exitSignal.price.toFixed(2)} | PnL: ${pnl.toFixed(2)}% (€${pnlEur.toFixed(2)}) | Balance: €${state.balance.toFixed(2)} | Win Rate: ${winRate}%`);
 
     state.currentPosition = null;
     saveState(state);
@@ -459,7 +539,7 @@ function createPosition(type, currentPrice, timestamp, state, rsiNow, fastEMA, s
     const quantity = availableBalance / currentPrice;
 
     if (availableBalance < 5) { // Minimum 5€ trade
-        console.log(`${CFG.logPrefix} Insufficient balance for trade: €${state.balance.toFixed(2)} available`);
+        logger.warn(`${CFG.logPrefix} Insufficient balance for trade: €${state.balance.toFixed(2)} available`);
         return null;
     }
 
@@ -482,7 +562,7 @@ function createPosition(type, currentPrice, timestamp, state, rsiNow, fastEMA, s
         second: '2-digit',
         timeZone: 'Europe/Madrid'
     });
-    console.log(`${CFG.logPrefix} ${ts} ${type} ENTRY ${CFG.symbol} at €${currentPrice.toFixed(2)} | Quantity: ${quantity.toFixed(6)} | Value: €${entryValue.toFixed(2)} | SL: €${position.stopLoss.toFixed(2)} | TP: €${position.takeProfit.toFixed(2)}`);
+    logger.info(`${CFG.logPrefix} ${ts} ${type} ENTRY ${CFG.symbol} at €${currentPrice.toFixed(2)} | Quantity: ${quantity.toFixed(6)} | Value: €${entryValue.toFixed(2)} | SL: €${position.stopLoss.toFixed(2)} | TP: €${position.takeProfit.toFixed(2)}`);
 
     saveState(state);
     return position;
@@ -490,16 +570,16 @@ function createPosition(type, currentPrice, timestamp, state, rsiNow, fastEMA, s
 
 // ====== main loop ======
 async function run() {
-    console.log(`${CFG.logPrefix} Starting on ${CFG.exchange} ${CFG.symbol} TF=${CFG.timeframe}`);
-    console.log(`${CFG.logPrefix} Risk Management: SL=${CFG.stopLossPercent}% TP=${CFG.takeProfitPercent}% Fees=${CFG.tradingFeePercent}%`);
+    logger.info(`${CFG.logPrefix} Starting on ${CFG.exchange} ${CFG.symbol} TF=${CFG.timeframe}`);
+    logger.info(`${CFG.logPrefix} Risk Management: SL=${CFG.stopLossPercent}% TP=${CFG.takeProfitPercent}% Fees=${CFG.tradingFeePercent}%`);
 
     // Initialize exchange
     const ex = await initializeExchange();
 
     // Load persistent state
     const state = loadState();
-    console.log(`${CFG.logPrefix} Virtual Trading - Starting Balance: €${CFG.initialBalance}`);
-    console.log(`${CFG.logPrefix} Loaded state: ${state.totalTrades} trades, €${state.balance.toFixed(2)} balance, ${state.totalPnL.toFixed(2)}% total PnL`);
+    logger.info(`${CFG.logPrefix} Virtual Trading - Starting Balance: €${CFG.initialBalance}`);
+    logger.info(`${CFG.logPrefix} Loaded state: ${state.totalTrades} trades, €${state.balance.toFixed(2)} balance, ${state.totalPnL.toFixed(2)}% total PnL`);
 
     let lastHeartbeat = Date.now();
 
@@ -508,7 +588,7 @@ async function run() {
             // Fetch candles first (OHLCV: [timestamp, open, high, low, close, volume])
             const ohlcv = await ex.fetchOHLCV(CFG.symbol, CFG.timeframe, undefined, Math.max(CFG.minBars + 5, 500));
             if (!ohlcv || ohlcv.length < CFG.minBars) {
-                console.log(`${CFG.logPrefix} Not enough candles yet (${ohlcv?.length || 0})`);
+                logger.info(`${CFG.logPrefix} Not enough candles yet (${ohlcv?.length || 0})`);
                 await sleep(CFG.pollMs);
                 continue;
             }
@@ -539,7 +619,7 @@ async function run() {
                     positionInfo = `| Active ${state.currentPosition.type} at €${state.currentPosition.entryPrice.toFixed(2)} | Current: €${currentPrice.toFixed(2)} | PnL: ${currentPnL.toFixed(2)}% (€${currentPnLEur.toFixed(2)}) | SL: €${state.currentPosition.stopLoss.toFixed(2)} | TP: €${state.currentPosition.takeProfit.toFixed(2)}`;
                 }
 
-                console.log(`${CFG.logPrefix} ${ts} Heartbeat - Running ${positionInfo} | Balance: €${state.balance.toFixed(2)} | Total trades: ${state.totalTrades} | Win Rate: ${state.totalTrades > 0 ? ((state.winningTrades / state.totalTrades) * 100).toFixed(1) : 0}%`);
+                logger.info(`${CFG.logPrefix} ${ts} Heartbeat - Running ${positionInfo} | Balance: €${state.balance.toFixed(2)} | Total trades: ${state.totalTrades} | Win Rate: ${state.totalTrades > 0 ? ((state.winningTrades / state.totalTrades) * 100).toFixed(1) : 0}%`);
                 lastHeartbeat = now;
             }
             const closes = closed.map(c => c[4]);
@@ -621,10 +701,10 @@ async function run() {
                         const distanceToSL = Math.abs(((currentPrice - state.currentPosition.stopLoss) / state.currentPosition.stopLoss) * 100);
                         const distanceToTP = Math.abs(((state.currentPosition.takeProfit - currentPrice) / currentPrice) * 100);
 
-                        console.log(`${CFG.logPrefix} ${ts} Position Monitoring - ${state.currentPosition.type} | Entry: €${state.currentPosition.entryPrice.toFixed(2)} | Current: €${currentPrice.toFixed(2)} | PnL: ${currentPnL.toFixed(2)}% (€${currentPnLEur.toFixed(2)}) | Distance to SL: ${distanceToSL.toFixed(2)}% | Distance to TP: ${distanceToTP.toFixed(2)}% | RSI: ${rsiNow.toFixed(1)}`);
+                        logger.info(`${CFG.logPrefix} ${ts} Position Monitoring - ${state.currentPosition.type} | Entry: €${state.currentPosition.entryPrice.toFixed(2)} | Current: €${currentPrice.toFixed(2)} | PnL: ${currentPnL.toFixed(2)}% (€${currentPnLEur.toFixed(2)}) | Distance to SL: ${distanceToSL.toFixed(2)}% | Distance to TP: ${distanceToTP.toFixed(2)}% | RSI: ${rsiNow.toFixed(1)}`);
                     } else {
                         // Show market info when no position
-                        console.log(`${CFG.logPrefix} ${ts} Monitoring - Price: €${currentPrice.toFixed(2)} | RSI: ${rsiNow.toFixed(1)} | Fast EMA: €${fastNow.toFixed(2)} | Slow EMA: €${slowNow.toFixed(2)} | Balance: €${state.balance.toFixed(2)}`);
+                        logger.info(`${CFG.logPrefix} ${ts} Monitoring - Price: €${currentPrice.toFixed(2)} | RSI: ${rsiNow.toFixed(1)} | Fast EMA: €${fastNow.toFixed(2)} | Slow EMA: €${slowNow.toFixed(2)} | Balance: €${state.balance.toFixed(2)}`);
                     }
                 }
             }
@@ -634,7 +714,7 @@ async function run() {
             await sleep(CFG.pollMs);
 
         } catch (err) {
-            console.error(`${CFG.logPrefix} Error:`, err.message);
+            logger.error(`${CFG.logPrefix} Error: ${err.message}`);
             await sleep(2000);
         }
     }
@@ -642,4 +722,4 @@ async function run() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-run().catch(e => console.error(e));
+run().catch(e => logger.error(`Fatal error: ${e.message}`));

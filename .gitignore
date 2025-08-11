@@ -136,6 +136,11 @@ Temporary Items
 *.swo
 *~
 
+# Trading bot files
+*.log
+trading_log.xlsx
+state*.json
+
 # OS generated files
 Thumbs.db
 ehthumbs.db

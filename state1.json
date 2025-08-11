@@ -1,19 +1,30 @@
 {
-  "lastClosedTs": 1754862300000,
-  "totalTrades": 0,
-  "winningTrades": 0,
-  "totalPnL": 0,
-  "balance": 100,
-  "currentPosition": {
-    "type": "LONG",
-    "entryPrice": 118555.7,
-    "timestamp": 1754835120000,
-    "symbol": "BTC/USDT",
-    "quantity": 0.0008013111136790555,
-    "stopLoss": 117962.9215,
-    "takeProfit": 119741.257,
-    "isActive": true
-  },
-  "trades": [],
-  "lastSaved": "2025-08-10T21:46:07.101Z"
+  "lastClosedTs": 1754899200000,
+  "totalTrades": 1,
+  "winningTrades": 1,
+  "totalPnL": 0.8400000000000004,
+  "balance": 100.798,
+  "currentPosition": null,
+  "trades": [
+    {
+      "id": 1,
+      "entryTime": 1754835120000,
+      "exitTime": 1754899154257,
+      "symbol": "BTC/USDT",
+      "type": "LONG",
+      "entryPrice": 118555.7,
+      "exitPrice": 119741.257,
+      "quantity": 0.0008013111136790555,
+      "entryValue": 95,
+      "exitValue": 95.95,
+      "stopLoss": 117962.9215,
+      "takeProfit": 119741.257,
+      "pnlPercent": 0.8400000000000004,
+      "pnlEur": 0.7980000000000028,
+      "fees": 0.152,
+      "finalBalance": 100.798,
+      "exitType": "TAKE_PROFIT"
+    }
+  ],
+  "lastSaved": "2025-08-11T08:01:04.131Z"
 }
