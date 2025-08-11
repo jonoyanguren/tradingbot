@@ -1,0 +1,24 @@
+{
+  "name": "tradingbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "agresivo": "STOP_LOSS_PERCENT=0.5 TAKE_PROFIT_PERCENT=1.0 RSI_LONG_MIN=45 RSI_SHORT_MAX=55 TIMEFRAME=1m VERBOSE=true node bot.js",
+    "medio": "STOP_LOSS_PERCENT=1.5 TAKE_PROFIT_PERCENT=3.0 RSI_LONG_MIN=52 RSI_SHORT_MAX=48 TIMEFRAME=5m VERBOSE=true node bot.js",
+    "conservador": "STOP_LOSS_PERCENT=2.5 TAKE_PROFIT_PERCENT=5.0 RSI_LONG_MIN=60 RSI_SHORT_MAX=40 TIMEFRAME=15m VERBOSE=true node bot.js",
+    "test": "STOP_LOSS_PERCENT=0.00005 TAKE_PROFIT_PERCENT=0.0001 RSI_PERIOD=5 RSI_LONG_MIN=49 RSI_SHORT_MAX=51 TIMEFRAME=1m VERBOSE=true node bot.js"
+  },
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "ccxt": "^4.4.99",
+    "concurrently": "^9.2.0",
+    "express": "^5.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}

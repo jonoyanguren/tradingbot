@@ -1,0 +1,19 @@
+{
+  "lastClosedTs": 1754862300000,
+  "totalTrades": 0,
+  "winningTrades": 0,
+  "totalPnL": 0,
+  "balance": 100,
+  "currentPosition": {
+    "type": "LONG",
+    "entryPrice": 118555.7,
+    "timestamp": 1754835120000,
+    "symbol": "BTC/USDT",
+    "quantity": 0.0008013111136790555,
+    "stopLoss": 117962.9215,
+    "takeProfit": 119741.257,
+    "isActive": true
+  },
+  "trades": [],
+  "lastSaved": "2025-08-10T21:46:07.101Z"
+}
